@@ -31,6 +31,26 @@ pub async fn suspend() -> zbus::Result<()> {
     manager.suspend(false).await
 }
 
+/// Notify logind that the session is unlocked after lock screen auth succeeds.
+/// Unlocks any session with LockedHint=true; other users' sessions are rejected
+/// by polkit and ignored.
+pub async fn unlock_user_session() -> zbus::Result<()> {
+    let connection = Connection::system().await?;
+    let manager = ManagerProxy::new(&connection).await?;
+    for info in manager.list_sessions().await? {
+        let session = SessionProxy::builder(&connection)
+            .path(info.path())?
+            .build()
+            .await?;
+        if let Ok(true) = session.locked_hint().await {
+            if let Err(err) = session.unlock().await {
+                tracing::warn!("logind unlock session {}: {}", info.sid(), err);
+            }
+        }
+    }
+    Ok(())
+}
+
 async fn inhibit(manager: &ManagerProxy<'_>) -> zbus::Result<OwnedFd> {
     let what = InhibitType::Sleep;
     let who = "COSMIC Greeter";

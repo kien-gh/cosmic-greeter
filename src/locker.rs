@@ -1172,6 +1172,13 @@ impl cosmic::Application for App {
                             commands.push(destroy_lock_surface(*surface_id));
                         }
 
+                        // Notify logind so cosmic-idle sees the Unlock signal.
+                        tokio::spawn(async {
+                            if let Err(err) = crate::logind::unlock_user_session().await {
+                                tracing::warn!("failed to notify logind of unlock: {}", err);
+                            }
+                        });
+
                         // Tell compositor to unlock
                         commands.push(unlock());
 
