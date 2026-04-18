@@ -31,6 +31,37 @@ pub async fn suspend() -> zbus::Result<()> {
     manager.suspend(false).await
 }
 
+/// Update logind's LockedHint for the current session.
+/// Ensures tools like cosmic-idle can read the correct locked state even if they
+/// started after the Lock signal was already emitted.
+pub async fn set_session_locked_hint(locked: bool) {
+    let Ok(connection) = Connection::system().await else {
+        return;
+    };
+    let Ok(manager) = ManagerProxy::new(&connection).await else {
+        return;
+    };
+    let Ok(session_path) = manager
+        .get_session_by_PID(std::os::unix::process::parent_id())
+        .await
+    else {
+        tracing::warn!("set_session_locked_hint: get_session_by_PID failed");
+        return;
+    };
+    let Ok(session) = SessionProxy::builder(&connection)
+        .path(&session_path)
+        .and_then(|b| Ok(b.build()))
+    else {
+        return;
+    };
+    let Ok(session) = session.await else {
+        return;
+    };
+    if let Err(err) = session.set_locked_hint(locked).await {
+        tracing::warn!("set_locked_hint({}): {}", locked, err);
+    }
+}
+
 /// Notify logind that the session is unlocked after lock screen auth succeeds.
 /// Unlocks any session with LockedHint=true; other users' sessions are rejected
 /// by polkit and ignored.

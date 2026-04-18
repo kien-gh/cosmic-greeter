@@ -945,6 +945,12 @@ impl cosmic::Application for App {
                     // Allow suspend
                     self.inhibit_opt = None;
 
+                    // Keep logind LockedHint in sync so idle daemons that started
+                    // after the Lock signal can still read the correct state.
+                    tokio::spawn(async {
+                        crate::logind::set_session_locked_hint(true).await;
+                    });
+
                     // Create lock surfaces
                     for (output, surface_id) in self.common.surface_ids.iter() {
                         commands.push(get_lock_surface(*surface_id, output.clone()));
